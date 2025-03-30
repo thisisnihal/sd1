@@ -32,7 +32,8 @@ from fastapi.middleware.cors import CORSMiddleware
 allowed_ips = [
     "http://10.12.9.43:3004",
     "10.12.9.43",
-    "http://10.12.10.174:3000"
+    "http://10.12.10.174:3000",
+    "http://localhost:3000"
 ]
 
 app.add_middleware(
@@ -104,7 +105,7 @@ def check_wind_farm(location: LocationRequest):
 
     if avg_wind_speed < 3.5:
         return {
-            "status": "not_feasible",
+            "status": "Not Feasible",
             "message": "Wind speed too low for a wind farm.",
             "avg_wind_speed": avg_wind_speed
         }
@@ -112,13 +113,13 @@ def check_wind_farm(location: LocationRequest):
     unsuitable_land = {"residential", "industrial", "urban"}
     if land_use_types and land_use_types.intersection(unsuitable_land):
         return {
-            "status": "not_feasible",
+            "status": "Not Feasible",
             "message": f"Land is {land_use_types} → Not suitable for wind farms."
         }
 
     if infra_count is None or infra_count < 5:
         return {
-            "status": "not_feasible",
+            "status": "Not Feasible",
             "message": "No roads or power grid nearby → Wind farm not feasible."
         }
 
@@ -260,7 +261,7 @@ def get_all(location: LocationRequest):
 
         pdf_file_path = generate_pdf(summary)
 
-        summary_link = f"/static/pdfs/{os.path.basename(pdf_file_path)}"
+        summary_link = f"static/pdfs/{os.path.basename(pdf_file_path)}"
         
         return {
             "data": data,
@@ -271,5 +272,5 @@ def get_all(location: LocationRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="0.0.0.0", port=8000)
