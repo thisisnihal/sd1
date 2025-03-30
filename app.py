@@ -9,7 +9,7 @@ from wind import (
     fetch_osm_infrastructure,
     fetch_existing_wind_turbines
 )
-from soil import calculate_water_harvesting_score
+from soil import calculate_water_harvesting_score, calculate_afforestation_feasibility
 
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -25,7 +25,23 @@ os.makedirs("static/pdfs", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+from fastapi.middleware.cors import CORSMiddleware
 
+
+# List of allowed IPs
+allowed_ips = [
+    "http://10.12.9.43:3004",
+    "10.12.9.43",
+    "http://10.12.10.174:3000"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_ips,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 async def root():
@@ -120,17 +136,107 @@ def check_wind_farm(location: LocationRequest):
 
 
 
+# def generate_pdf(md_content: str) -> str:
+#     """Converts Markdown content (response from LLM) to PDF and saves it on the server."""
+    
+#     html_content = markdown.markdown(md_content)
+    
+#     pdf_filename = f"static/pdfs/summary_{uuid.uuid4().hex}.pdf"
+    
+#     html = HTML(string=html_content)
+#     html.write_pdf(pdf_filename)
+    
+#     return pdf_filename
+
+
+import markdown2
+
+
 def generate_pdf(md_content: str) -> str:
-    """Converts Markdown content (response from LLM) to PDF and saves it on the server."""
+    """Converts Markdown content to PDF and saves it locally."""
     
-    html_content = markdown.markdown(md_content)
+    # Convert markdown to HTML using markdown2 with table extras
+    html_content = markdown2.markdown(md_content, extras=["tables"])
     
+    # Define more robust CSS for better table styling
+    custom_css = """
+    body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        line-height: 1.6;
+    }
+    h2, h3 {
+        color: #333;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        page-break-inside: avoid;
+    }
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px 12px;
+        text-align: left;
+        vertical-align: top;
+    }
+    th {
+        background-color: #f4f4f4;
+        font-weight: bold;
+    }
+    tr:nth-child(even) {
+        background-color: #f9f9f9;
+    }
+    /* Ensure tables don't overflow page width */
+    table {
+        word-wrap: break-word;
+        table-layout: fixed;
+    }
+    /* Add some spacing between sections */
+    h2 {
+        margin-top: 30px;
+    }
+    """
+
+    # Create a more robust HTML structure
+    html_with_css = f"""
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Sustainability Report</title>
+            <style>
+                {custom_css}
+            </style>
+        </head>
+        <body>
+            <div class="content">
+                {html_content}
+            </div>
+        </body>
+    </html>
+    """
+    
+    # Create a unique PDF filename using UUID
     pdf_filename = f"static/pdfs/summary_{uuid.uuid4().hex}.pdf"
     
-    html = HTML(string=html_content)
-    html.write_pdf(pdf_filename)
+    # Generate the PDF with additional weasyprint options for better rendering
+    html = HTML(string=html_with_css)
+    html.write_pdf(
+        pdf_filename,
+        stylesheets=None,
+        presentational_hints=True  # Helps with some table rendering
+    )
     
     return pdf_filename
+
+
+@app.post("/check_green")
+def check_green(location: LocationRequest):
+    latitude = location.latitude
+    longitude = location.longitude
+    return calculate_afforestation_feasibility(latitude, longitude)
+
 
 from ai import get_summary
 
@@ -141,9 +247,12 @@ def get_all(location: LocationRequest):
     try:
         solar_input = SolarInput(latitude= location.latitude, longitude= location.longitude)
         data = {
+            "latitude": location.latitude,
+            "longitude": location.longitude,
             "solar": check_solar_farm(solar_input),
             "wind": check_wind_farm(location),
             "water": check_water_harvesting_score(location),
+            "green": check_green(location)
         }
 
         str_data = str(data)
@@ -156,7 +265,7 @@ def get_all(location: LocationRequest):
         return {
             "data": data,
             "summary_link": summary_link,
-            "summary": summary
+            # "summary": summary
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
