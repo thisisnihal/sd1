@@ -17,7 +17,10 @@ import markdown
 from weasyprint import HTML
 import uuid
 import uvicorn
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 
 app = FastAPI()
 os.makedirs("static/pdfs", exist_ok=True)
